@@ -1,0 +1,135 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+'''
+[ Script ]
+
+geoipfetch
+
+PT-br:
+Simples "Check HTTP Status" para propositos de monitoracao
+----------------------------
+EN:
+Simple "Check HTTP Status" for Monitoring purposes
+
+rlima@gmail.com
+$Id: httpstatus, v 1 2018/01/10 rlima Exp rlima $
+
+[ License ]
+
+Copyright (c) 2018 Reinaldo Marques de Lima reimlima@gmail.com                                            
+
+PT-br:
+A  permissão  é  concedida, a título gratuito, a qualquer pessoa que obtenha uma   cópia deste software e 
+arquivos de  documentação  associados (o "Software"), para lidar com o Software sem restrição, incluindo, 
+sem limitação,  os  direitos  de  usar,  copiar,  modificar, mesclar, publicar, distribuir, sublicenciar, 
+e / ou vender cópias do Software, e  permitir  que as  pessoas a  quem  o  Software  é fornecido o façam, 
+sujeito às seguintes condições:
+
+O  aviso  de  copyright  acima e este aviso de permissão devem ser incluídos em todas as cópias ou partes 
+substanciais do Software.
+
+O  SOFTWARE  É  FORNECIDO  "COMO ESTÁ", SEM GARANTIA  DE QUALQUER TIPO, EXPRESSA OU IMPLÍCITA, INCLUINDO, 
+SEM LIMITAÇÃO, AS GARANTIAS DE COMERCIALIZAÇÃO, ADEQUAÇÃO A UM DETERMINADO FIM E NÃO VIOLAÇÃO. EM  NENHUM 
+CASO  OS  AUTORES  OU  DIREITOS  AUTORAIS TITULARES  SERÃO RESPONSÁVEIS POR QUALQUER RECLAMAÇÃO, DANOS OU 
+OUTRAS RESPONSABILIDADES, SEJA EM UMA  AÇÃO DE CUMPRIMENTO DE CONTRATO  OU  DE  OUTRA  FORMA,  DECORRENTE 
+DE, OU EM CONEXÃO COM O SOFTWARE OU O USO OU OUTRAS FUNÇÕES DO SOFTWARE.
+
+Exceto  conforme  contido  no  presente aviso, o nome do(s) dos detentores de direitos autorais acima não 
+devem ser utilizados em publicidade ou de outra forma  para  promover  a venda, uso ou outras negociações 
+deste Software sem autorização prévia por escrito.
+
+----------------------------                                                                              
+
+EN:                                                                                                       
+Permission  is  hereby  granted, free  of  charge,  to  any  person obtaining a copy of this software and 
+associated  documentation  files (the "Software"), to deal in the Software without restriction, including 
+without  limitation  the  rights  to  use,  copy, modify, merge, publish, distribute, sublicense,  and/or 
+sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to 
+the following conditions:
+
+The  above  copyright  notice  and  this permission notice shall be included in all copies or substantial 
+portions of the Software.
+
+THE  SOFTWARE  IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,  INCLUDING BUT NOT
+LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS  FOR  A  PARTICULAR  PURPOSE AND  NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER  IN  AN  ACTION  OF  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
+
+Except  as  contained  in  this  notice, the name(s) of the above copyright holders shall not be used in
+advertising  or  otherwise  to  promote  the  sale, use or other dealings in this Software without prior
+written authorization.
+
+[ Changelog ]
+
+[09/01/2018] - v1 - First Stable Release.
+
+'''
+
+import os, re, sys, urllib3, getopt, time
+
+
+urllib3.disable_warnings()
+timeStamp = int(time.time())
+scriptName = os.path.basename(__file__)
+xmlTemplate = """<?xml version="1.0" encoding="UTF-8"?>\n<httpstatus>\n\t<timestamp>%(timestamp)s</timestamp>\n\t<exitmessage>%(exitmessage)s</exitmessage>\n</httpstatus>"""
+jsonTemplate = """{\n\t"httpstatus": {\n\t\t"timestamp": "%(timestamp)s",\n\t\t"exitmessage": "%(exitmessage)s"\n\t}\n}"""
+
+def scriptHelp():
+    print("Error:\n\tUsage: %s -u <url> -o <output type>" % (scriptName))
+    print("Example:\n\t%s -u https://google.com -o nagios\n" % (scriptName))
+    print("Output Type Options: nagios, xml, json")
+    exit(1)
+
+def exitCheck(outputFormat, checkResult):
+    checkExit = checkResult[0]
+    checkData = {'timestamp': timeStamp, 'exitmessage': checkExit}
+    if outputFormat == "nagios":
+        print checkExit
+        exit(checkResult[1])
+    elif outputFormat == "xml":
+        print xmlTemplate%checkData
+    elif outputFormat == "json":
+        print jsonTemplate%checkData
+    else:
+        print "Unknown output format"
+        exit(1)
+
+def httpCheck(urlToCheck):
+    http = urllib3.PoolManager()
+    try:
+        r = http.request('GET', urlToCheck, retries=False)
+        httpStatus = str(r.status)
+        if re.match("^([^23]..|[^3]0[1]|[23]0[^01]|300)$", httpStatus):
+            exitMessage = "HTTP CRITICAL: " + urlToCheck + " " + str(httpStatus) + " Found"
+            exitCode = 2
+        else:
+            exitMessage = "HTTP OK: " + urlToCheck + " " + str(httpStatus) + " Found"
+            exitCode = 0
+    except urllib3.exceptions.NewConnectionError:
+        exitMessage = "UNKNOWN - " + urlToCheck + " is Unreachable"
+        exitCode = 3
+
+    return exitMessage, exitCode
+
+def main():
+    scriptOptions = 'u:o:'
+    optlist, args = getopt.getopt(sys.argv[1:],scriptOptions)
+
+    if not optlist:
+        scriptHelp()
+    else:
+        urlToCheck = optlist[0][1]
+        outputFormat = optlist[1][1]
+        checkResult = httpCheck(urlToCheck)
+
+    exitCheck(outputFormat, checkResult)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except IOError:
+        print "Forced Exit"
+	traceback.print_exc()
